@@ -226,6 +226,10 @@ def _drive(engine: Engine, cfg: RunConfig, status_fn: Callable[[str], None]) -> 
         from braided.scheduler.tree import TreeStrategy
 
         strategy = TreeStrategy(engine)
+    elif cfg.search.strategy == "braided":
+        from braided.scheduler.braided import BraidedStrategy
+
+        strategy = BraidedStrategy(engine)
     else:
         raise NotImplementedError(f"strategy {cfg.search.strategy!r} lands in a later phase")
 

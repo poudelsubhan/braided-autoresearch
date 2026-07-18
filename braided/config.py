@@ -43,6 +43,7 @@ class SearchConfig(BaseModel):
     initial_branches: int = 3  # tree/braided: arms at start
     stagnation_m: int = 4  # fork a new branch after m consecutive rejections on an arm
     min_active_branches: int = 2  # prune floor
+    max_active_branches: int = 4  # stagnation forks stop above this cap
     workers: int = 1  # parallel arm pulls (cpu-bound tasks only)
     accept_noise_multiplier: float = 1.5  # accept iff improvement > mult * baseline std
 
