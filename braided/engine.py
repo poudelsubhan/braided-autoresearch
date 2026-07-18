@@ -10,11 +10,13 @@ idempotently.
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 from typing import Callable
 
 from braided import context
 from braided.accept import is_accepted, load_baseline, threshold_for_run
+from braided.agents.llm import LLMError
 from braided.agents.proposer import Proposal, ProposalError, propose
 from braided.config import RunConfig
 from braided.graph import Graph, PatchError, ProtectedPathViolation
@@ -38,6 +40,9 @@ class Engine:
         self.proposer_fn = proposer_fn
         self.status_fn = status_fn
         self.branch_directions: dict[str, str] = self._load_directions()
+        # Guards ledger appends, attempt-index allocation, and ref/notes
+        # mutations when parallel workers pull different arms concurrently.
+        self.lock = threading.RLock()
 
     # -- derived state (resume-safe) ------------------------------------------
 
@@ -74,10 +79,22 @@ class Engine:
 
     # -- the attempt cycle ----------------------------------------------------
 
-    def execute_attempt(self, branch: str) -> AttemptEvent:
-        idx = self.ledger.next_attempt_index()
-        self.graph.checkout(branch)
-        parent_sha = self.graph.head_of(branch)
+    def execute_attempt(self, branch: str, worktree: Path | None = None,
+                        idx: int | None = None) -> AttemptEvent:
+        """One propose→apply→score→accept/revert cycle on `branch`.
+
+        `worktree`: an isolated checkout of `branch` (from `git worktree add`)
+        for parallel pulls; defaults to the main experiment worktree. Commits
+        and notes go through the shared repo either way, serialized by lock.
+        """
+        wt_graph = Graph(worktree) if worktree else self.graph
+        with self.lock:
+            if idx is None:
+                idx = self.ledger.next_attempt_index()
+            if worktree is None:
+                wt_graph.checkout(branch)
+            parent_sha = wt_graph.head_of(branch)
+        wt_path = worktree or self.repo
         parent_score = self.score_of(parent_sha)
 
         event = AttemptEvent(
@@ -87,7 +104,7 @@ class Engine:
 
         try:
             proposal = self.proposer_fn(
-                repo=self.repo,
+                repo=wt_path,
                 task=self.task,
                 rationale_trail=context.rationale_trail(self.graph, branch),
                 failure_digest=context.failure_digest(self.ledger, branch),
@@ -101,13 +118,17 @@ class Engine:
             event.failure_kind = "bad-proposal"
             event.detail = str(e)[:500]
             return self._finish(event, parent_score)
+        except LLMError as e:
+            event.failure_kind = "llm-error"
+            event.detail = str(e)[:500]
+            return self._finish(event, parent_score)
 
         event.rationale = proposal.rationale
         event.diff_summary = self._diff_summary(proposal.patch)
         (self.run_dir / "logs" / f"attempt-{idx:04d}.patch").write_text(proposal.patch)
 
         try:
-            self.graph.apply_patch(proposal.patch, protected=self.task.protected_paths)
+            wt_graph.apply_patch(proposal.patch, protected=self.task.protected_paths)
         except ProtectedPathViolation as e:
             event.failure_kind = "protected-path-violation"
             event.detail = str(e)[:500]
@@ -118,31 +139,33 @@ class Engine:
             return self._finish(event, parent_score)
 
         result = run_scorer(
-            self.repo, self.task, self.run_dir / "logs", log_prefix=f"attempt-{idx:04d}"
+            wt_path, self.task, self.run_dir / "logs", log_prefix=f"attempt-{idx:04d}"
         )
         event.duration = result.duration
 
         if not result.ok:
             event.failure_kind = result.failure_kind
             event.detail = result.detail[:500]
-            self.graph.checkout(branch)  # revert working tree
+            wt_graph.checkout(branch)  # revert working tree
             return self._finish(event, parent_score)
 
         event.score = result.score
-        if is_accepted(self.task, result.score, parent_score, self.threshold):
-            sha = self.graph.commit_all(
-                f"[{idx:04d}] {proposal.rationale[:72]}",
-                branch, score=result.score, rationale=proposal.rationale,
-            )
-            event.sha = sha
-            event.result = "accepted"
-        else:
-            event.result = "rejected"
-            self.graph.checkout(branch)  # revert
+        with self.lock:
+            if is_accepted(self.task, result.score, parent_score, self.threshold):
+                sha = wt_graph.commit_all(
+                    f"[{idx:04d}] {proposal.rationale[:72]}",
+                    branch, score=result.score, rationale=proposal.rationale,
+                )
+                event.sha = sha
+                event.result = "accepted"
+            else:
+                event.result = "rejected"
+                wt_graph.checkout(branch)  # revert
         return self._finish(event, parent_score)
 
     def _finish(self, event: AttemptEvent, parent_score: float) -> AttemptEvent:
-        self.ledger.append(event)
+        with self.lock:
+            self.ledger.append(event)
         _, best = self.best_node()
         outcome = event.result if event.result != "failed" else f"failed:{event.failure_kind}"
         score_s = f"{event.score:.4f}" if event.score is not None else "-"
@@ -180,10 +203,29 @@ def run_search(cfg: RunConfig, tui: bool = False,
     """Drive the configured strategy to completion (resume-safe, Ctrl-C-safe)."""
     engine = Engine(cfg, proposer_fn=proposer_fn, status_fn=status_fn)
 
+    if tui:
+        from braided.tui import TUI
+
+        with TUI(engine) as t:
+            engine.status_fn = t.status
+            try:
+                _drive(engine, cfg, t.status)
+            finally:
+                engine.status_fn = status_fn
+        return
+
+    _drive(engine, cfg, status_fn)
+
+
+def _drive(engine: Engine, cfg: RunConfig, status_fn: Callable[[str], None]) -> None:
     if cfg.search.strategy == "greedy":
         from braided.scheduler.greedy import GreedyStrategy
 
         strategy = GreedyStrategy(engine)
+    elif cfg.search.strategy == "tree":
+        from braided.scheduler.tree import TreeStrategy
+
+        strategy = TreeStrategy(engine)
     else:
         raise NotImplementedError(f"strategy {cfg.search.strategy!r} lands in a later phase")
 
@@ -192,7 +234,18 @@ def run_search(cfg: RunConfig, tui: bool = False,
         status_fn(f"resuming: {done}/{cfg.search.max_total_runs} attempts already in ledger")
     try:
         while engine.attempts_done() < cfg.search.max_total_runs:
-            strategy.step()
+            # Don't burn the whole attempt budget against a dead/rate-limited
+            # LLM: stop after 3 consecutive llm-error attempts; resume later.
+            recent = engine.ledger.attempts()[-3:]
+            if len(recent) == 3 and all(a.failure_kind == "llm-error" for a in recent):
+                status_fn("3 consecutive LLM failures — pausing run; rerun to resume")
+                return
+            remaining = cfg.search.max_total_runs - engine.attempts_done()
+            workers = min(cfg.search.workers, remaining)
+            if workers > 1 and hasattr(strategy, "step_parallel"):
+                strategy.step_parallel(workers)
+            else:
+                strategy.step()
     except KeyboardInterrupt:
         status_fn("interrupted — ledger and DAG are consistent; rerun to resume")
         return

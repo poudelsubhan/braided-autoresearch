@@ -33,7 +33,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     from braided.engine import run_search
 
     cfg = RunConfig.load(args.config)
-    run_search(cfg, tui=args.tui)
+    # line-flushing status so `run.log` tails work when stdout is redirected
+    run_search(cfg, tui=args.tui, status_fn=lambda s: print(s, flush=True))
     return 0
 
 

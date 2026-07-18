@@ -52,9 +52,14 @@ def _complete_cli(prompt: str, system: str, model: str | None, max_tokens: int) 
 
 
 def complete(prompt: str, system: str = "", max_tokens: int = 8000) -> str:
+    import time
+
     model = os.environ.get("BRAIDED_MODEL")
-    tries, last_err = 2, None
-    for _ in range(tries):
+    backoffs = [0, 15, 60]  # seconds before each try; rides out rate-limit blips
+    last_err = None
+    for delay in backoffs:
+        if delay:
+            time.sleep(delay)
         try:
             if os.environ.get("ANTHROPIC_API_KEY"):
                 out = _complete_sdk(prompt, system, model, max_tokens)
@@ -65,4 +70,4 @@ def complete(prompt: str, system: str = "", max_tokens: int = 8000) -> str:
             last_err = LLMError("empty completion")
         except (LLMError, subprocess.TimeoutExpired) as e:
             last_err = e
-    raise LLMError(f"completion failed after {tries} tries: {last_err}")
+    raise LLMError(f"completion failed after {len(backoffs)} tries: {last_err}")
