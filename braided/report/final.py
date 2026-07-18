@@ -85,6 +85,18 @@ def build_final_report(run_dirs: list[str | Path], out_dir: str | Path = ".") ->
         "granularity.",
         "- **Attempt budget ≠ token budget**: merge attempts cost one attempt but "
         "larger prompts; strategies are equalized on scorer executions.",
+        "",
+        "## 6. Future work",
+        "",
+        "- **Extrapolator**: the replication tags provide exactly the trigger a "
+        "step-size controller needs. When a change-class is accepted ≥2× on a "
+        "lineage (or replicates across lineages), switch that branch's proposer "
+        "from \"one focused change\" to \"push this mechanism to its endpoint in "
+        "a single larger patch\". Deliberately excluded from this bake-off to "
+        "keep the proposer identical across strategies.",
+        "- **Sandbox hardening**: swap subprocess isolation for E2B/Modal.",
+        "- **Second task family**: the nanogpt-shakespeare adapter is ready; a "
+        "GPU series would test transfer of the replication finding.",
     ]
 
     report_path = out_dir / "REPORT.md"
