@@ -10,12 +10,12 @@ from __future__ import annotations
 import json
 import shutil
 import statistics
-import subprocess
 import time
 import urllib.request
 from pathlib import Path
 
 from braided.config import RunConfig, SearchConfig, TaskConfig, load_task_config
+from braided.graph import Graph, git as _graph_git
 from braided.runner import run_scorer
 
 HARNESS_ROOT = Path(__file__).resolve().parent.parent
@@ -33,11 +33,7 @@ TINYSHAKESPEARE_URL = (
 EXPERIMENT_GITIGNORE = "__pycache__/\n*.pyc\nckpt.pt\n"
 
 
-def git(repo: Path, *args: str) -> str:
-    proc = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"git {' '.join(args)} failed in {repo}: {proc.stderr.strip()}")
-    return proc.stdout.strip()
+git = _graph_git
 
 
 def _prepare_nanogpt(repo: Path, run_dir: Path) -> None:
@@ -122,4 +118,10 @@ def init_task(
         "budget_seconds": task.budget_seconds,
     }
     (run_dir / "baseline.json").write_text(json.dumps(baseline, indent=2))
+
+    # Decorate the root node: baseline score + meta ride on the DAG itself.
+    graph = Graph(repo)
+    root = graph.root()
+    graph.set_score(root, baseline["mean"])
+    graph.set_meta(root, {"branch": "main", "kind": "baseline", "rationale": "baseline"})
     return run_dir

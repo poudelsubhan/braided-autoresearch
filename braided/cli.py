@@ -34,13 +34,28 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def cmd_report(args: argparse.Namespace) -> int:
-    print("`braided report` lands in Phase 1+.", file=sys.stderr)
+    if args.tree:
+        if not args.run:
+            print("--tree requires --run <run-dir>", file=sys.stderr)
+            return 2
+        from braided.report.tree import render_tree
+
+        print(render_tree(args.run))
+        return 0
+    print("this report mode lands in a later phase", file=sys.stderr)
     return 2
 
 
 def cmd_verify_ledger(args: argparse.Namespace) -> int:
-    print("`braided verify-ledger` lands in Phase 1.", file=sys.stderr)
-    return 2
+    from braided.ledger import verify_ledger
+
+    problems = verify_ledger(args.run)
+    if problems:
+        for p in problems:
+            print(f"FAIL: {p}")
+        return 1
+    print("ledger and DAG are consistent")
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
