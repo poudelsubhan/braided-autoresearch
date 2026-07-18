@@ -29,8 +29,12 @@ def cmd_init_task(args: argparse.Namespace) -> int:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    print("`braided run` lands in Phase 2.", file=sys.stderr)
-    return 2
+    from braided.config import RunConfig
+    from braided.engine import run_search
+
+    cfg = RunConfig.load(args.config)
+    run_search(cfg, tui=args.tui)
+    return 0
 
 
 def cmd_report(args: argparse.Namespace) -> int:

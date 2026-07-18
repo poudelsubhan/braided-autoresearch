@@ -196,13 +196,26 @@ class Graph:
             f.write(patch if patch.endswith("\n") else patch + "\n")
             patch_file = f.name
         proc = subprocess.run(
-            ["git", "apply", "--whitespace=nowarn", patch_file],
+            # --recount: LLM-written hunk headers often have wrong line counts;
+            # context lines still have to match, which is the part that matters.
+            ["git", "apply", "--recount", "--whitespace=fix", patch_file],
             cwd=self.repo,
             capture_output=True,
             text=True,
         )
         if proc.returncode != 0:
-            raise PatchError(f"git apply failed: {proc.stderr.strip()[:800]}")
+            # git apply is stricter than LLM diffs warrant (EOF-anchoring of
+            # hunks without trailing context, etc.) — fall back to locating
+            # hunks by exact context match.
+            from braided.patching import FuzzyPatchError, apply_patch_text
+
+            try:
+                apply_patch_text(self.repo, patch)
+            except FuzzyPatchError as e:
+                raise PatchError(
+                    f"git apply failed: {proc.stderr.strip()[:400]}; "
+                    f"fuzzy apply failed: {e}"
+                ) from e
         return changed
 
     def commit_all(self, message: str, branch: str, score: float | None = None,
