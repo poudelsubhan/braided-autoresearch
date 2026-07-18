@@ -1,0 +1,37 @@
+{
+  "runs": [
+    "runs/run2a-greedy-cpu",
+    "runs/run3a-tree-cpu",
+    "runs/run5-braided-cpu"
+  ],
+  "bakeoff": {
+    "run2a-greedy-cpu": {
+      "best": 4806.499,
+      "baseline": 15.038,
+      "attempts": 30
+    },
+    "run3a-tree-cpu": {
+      "best": 3272.198,
+      "baseline": 15.024333333333333,
+      "attempts": 30
+    },
+    "run5-braided-cpu": {
+      "best": 5826.544,
+      "baseline": 15.205333333333334,
+      "attempts": 30
+    }
+  },
+  "replication": {
+    "n_total": 53,
+    "replicated": {
+      "n": 22,
+      "mean_retention": 1.0053903161346534
+    },
+    "unreplicated": {
+      "n": 31,
+      "mean_retention": 1.4586744394434479
+    },
+    "effect": -0.45328412330879453
+  },
+  "n_rows": 53
+}

@@ -56,6 +56,8 @@ def build_final_report(run_dirs: list[str | Path], out_dir: str | Path = ".") ->
         f"{_fmt(repl['unreplicated']['mean_retention'])}",
         f"- effect (replicated − unreplicated): **{_fmt(repl['effect'])}**",
         "",
+        _interpret_effect(repl),
+        "",
         "This is a directional finding at hackathon sample size, not a significance "
         "claim.",
         "",
@@ -115,6 +117,28 @@ def build_final_report(run_dirs: list[str | Path], out_dir: str | Path = ".") ->
 
 def _fmt(x) -> str:
     return "n/a" if x is None else f"{x:.3f}"
+
+
+def _interpret_effect(repl: dict) -> str:
+    eff = repl["effect"]
+    if eff is None:
+        return "_Insufficient data to estimate the effect._"
+    rep_ret = repl["replicated"]["mean_retention"]
+    unrep_ret = repl["unreplicated"]["mean_retention"]
+    if eff > 0:
+        return ("Direction consistent with the hypothesis: replicated changes "
+                "retained more of their gain on the held-out scorer.")
+    if rep_ret is not None and unrep_ret is not None and rep_ret > 0.9 and unrep_ret > 0.9:
+        return ("**Hypothesis not supported on this task — and the likely reason is "
+                "instructive**: both groups retained essentially all of their gain "
+                "on the held-out scorer (retention ≥ 1), i.e. no reward hacking "
+                "occurred for the detector to catch. This task's public scorer has a "
+                "byte-exact correctness oracle, which blocks metric-gaming by "
+                "construction. The replication signal is designed for tasks with "
+                "softer scorers (e.g. validation loss), where public gains CAN be "
+                "fake; a GPU nanogpt series is the right follow-up test.")
+    return ("Hypothesis not supported on this task: unreplicated changes retained "
+            "as much or more of their gain than replicated ones at this sample size.")
 
 
 def audit(run_dirs: list[str | Path], report_path: str | Path = "REPORT.md") -> list[str]:

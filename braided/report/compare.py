@@ -18,7 +18,11 @@ def run_curve(run_dir: str | Path) -> dict:
     baseline = json.loads((run_dir / "baseline.json").read_text())
     best = baseline["mean"]
     curve = [best]
-    for e in Ledger(run_dir).attempts():
+    ledger = Ledger(run_dir)
+    # merge attempts consume budget like any pull — one curve point each
+    events = sorted(ledger.attempts() + ledger.merge_attempts(),
+                    key=lambda e: e.attempt_index)
+    for e in events:
         if e.score is not None and cfg.task.better(e.score, best):
             best = e.score
         curve.append(best)
