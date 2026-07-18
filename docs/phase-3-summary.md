@@ -35,11 +35,11 @@
 - Baseline mean **15.02** items/sec (std 0.138 → threshold 0.207).
 - Direction hints drawn by the LLM at birth: main = data-layout/memory-access restructuring;
   b1 = algorithmic redundancy elimination; b2 = parallelism/concurrency.
-- Result: best public score **{BEST_PUBLIC}** at `{BEST_SHA}` ({N_ACCEPTED} accepted /
-  {N_REJECTED} rejected / {N_FAILED} failed across {N_BRANCHES} lineages; {N_FORKS} forks,
-  {N_PRUNES} prunes).
-- ≥2 lineages accepted commits: {LINEAGE_ACCEPTS}.
-- Held-out: baseline **{HELD_BASE}** → best **{HELD_BEST}**.
+- Result: best public score **3272.20** at `524f2562` (20 accepted /
+  10 rejected / 0 failed across 3 lineages; 3 (initial) forks,
+  0 prunes).
+- ≥2 lineages accepted commits: b1: 10, main: 8, b2: 2 — all three lineages accepted commits.
+- Held-out: baseline **40.60** → best **4831.53**.
 - TUI verified separately on a live run (headless render also unit-tested); the run itself was
   executed with plain status streaming because it ran unattended in the background. UCB pull
   decisions are visible in the ledger ordering and the per-arm stats.

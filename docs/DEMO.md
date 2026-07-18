@@ -2,10 +2,10 @@
 
 ## The one-sentence pitch
 
-Karpathy-style autoresearch is a straight line — propose, keep or revert, repeat. We turned
+Karpathy-style autoresearch is a straight line: propose, keep or revert, repeat. I turned
 it into a **git DAG**: a bandit decides which research lineage to grow, an agent writes
 semantic merges between lineages as true two-parent merge commits, and when independent
-lineages rediscover the same mechanism we tag it **replicated** — which turns out to predict
+lineages rediscover the same mechanism I tag it **replicated**: which turns out to predict
 that the improvement survives a hidden held-out scorer. Self-consistency as a free
 reward-hacking detector.
 
