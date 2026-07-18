@@ -143,6 +143,7 @@ class BraidedStrategy(TreeStrategy):
         engine = self.engine
         with engine.lock:
             engine.ledger.append(event)
+            engine.refresh_live_artifacts()
         # always leave the tree on a real branch
         engine.graph.checkout(event.branch or plan.branch_a)
         scores = ", ".join(

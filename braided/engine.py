@@ -163,9 +163,24 @@ class Engine:
                 wt_graph.checkout(branch)  # revert
         return self._finish(event, parent_score)
 
+    def refresh_live_artifacts(self) -> None:
+        """Re-export graph.json (+ ensure graph.html) so the demo page grows
+        live during a run. Read-only over graph/ledger; failures are ignored —
+        the loop must never depend on the demo surface."""
+        try:
+            from braided.report.graph_html import write_graph_html
+            from braided.report.graphjson import export_graph_json
+
+            export_graph_json(self.run_dir)
+            if not (self.run_dir / "graph.html").exists():
+                write_graph_html(self.run_dir)
+        except Exception:
+            pass
+
     def _finish(self, event: AttemptEvent, parent_score: float) -> AttemptEvent:
         with self.lock:
             self.ledger.append(event)
+            self.refresh_live_artifacts()
         _, best = self.best_node()
         outcome = event.result if event.result != "failed" else f"failed:{event.failure_kind}"
         score_s = f"{event.score:.4f}" if event.score is not None else "-"
