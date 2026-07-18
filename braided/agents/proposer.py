@@ -168,8 +168,13 @@ def propose(
     parent_score: float | None = None,
     accept_threshold: float | None = None,
 ) -> Proposal:
-    prompt = build_prompt(
-        repo, task, rationale_trail, failure_digest, sibling_digest,
-        replicated_digest, direction, parent_score, accept_threshold,
+    from braided.privacy import assert_no_private_leak
+
+    prompt = assert_no_private_leak(
+        build_prompt(
+            repo, task, rationale_trail, failure_digest, sibling_digest,
+            replicated_digest, direction, parent_score, accept_threshold,
+        ),
+        task,
     )
     return parse_response(llm.complete(prompt, system=SYSTEM))

@@ -1,7 +1,8 @@
-"""Held-out evaluation of a finished run: baseline root vs best node.
+"""Held-out evaluation: best-vs-baseline summary + per-node sweep (task 4.4).
 
-Full per-node held-out sweeps land in Phase 4 (task 4.4); this covers the
-Phase 2/3 deliverable "best-vs-baseline public and held-out scores".
+The private scorer is invoked only here and in Engine.run_heldout; its command
+and data path must never reach agent context — enforced by
+assert_no_private_leak, called on every prompt the agents build.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from pathlib import Path
 
 from braided.config import RunConfig
 from braided.engine import Engine
+from braided.ledger import Ledger, ReplicationTagEvent
 
 
 def heldout_summary(run_dir: str | Path) -> dict:
@@ -39,3 +41,49 @@ def heldout_summary(run_dir: str | Path) -> dict:
     }
     (run_dir / "heldout.json").write_text(json.dumps(summary, indent=2))
     return summary
+
+
+def heldout_sweep(run_dir: str | Path, status_fn=print) -> dict:
+    """Run the private scorer on the root and EVERY accepted node (attempts
+    and composed merges), recording public vs held-out score and whether the
+    node belongs to a replicated class. The Phase 5 headline dataset.
+    Incremental: nodes already swept are skipped on re-run."""
+    run_dir = Path(run_dir)
+    cfg = RunConfig.load(run_dir / "run.yaml")
+    engine = Engine(cfg)
+    ledger = Ledger(run_dir)
+
+    out_path = run_dir / "heldout_nodes.json"
+    rows: dict[str, dict] = {}
+    if out_path.exists():
+        rows = {r["sha"]: r for r in json.loads(out_path.read_text())["nodes"]}
+
+    replicated_shas = set()
+    for e in ledger.events():
+        if isinstance(e, ReplicationTagEvent):
+            replicated_shas.update(e.member_shas)
+
+    root = engine.graph.root()
+    targets = [(root, "baseline", engine.baseline["mean"])]
+    for e in ledger.attempts():
+        if e.result == "accepted" and e.sha:
+            targets.append((e.sha, "attempt", e.score))
+    for e in ledger.merge_attempts():
+        if e.result == "compose" and e.sha:
+            targets.append((e.sha, "merge", e.score))
+
+    for sha, kind, public in targets:
+        if sha in rows:
+            continue
+        heldout = engine.run_heldout(sha, f"heldout-{sha[:8]}")
+        rows[sha] = {
+            "sha": sha, "kind": kind, "public": public, "heldout": heldout,
+            "replicated": sha in replicated_shas,
+        }
+        status_fn(f"heldout {sha[:8]} ({kind}): public={public:.4f} "
+                  f"heldout={heldout if heldout is None else round(heldout, 4)}")
+    engine.graph.checkout("main")
+
+    result = {"task": cfg.task.name, "nodes": list(rows.values())}
+    out_path.write_text(json.dumps(result, indent=2))
+    return result
