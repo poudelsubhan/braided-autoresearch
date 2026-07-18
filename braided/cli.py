@@ -47,8 +47,42 @@ def cmd_report(args: argparse.Namespace) -> int:
 
         print(render_tree(args.run))
         return 0
-    print("this report mode lands in a later phase", file=sys.stderr)
+    if args.json:
+        from braided.report.graph_html import write_graph_html
+        from braided.report.graphjson import export_graph_json
+
+        path = export_graph_json(args.run)
+        html = write_graph_html(args.run)
+        print(f"wrote {path} and {html} — open via `python -m http.server` in the run dir")
+        return 0
+    if args.final:
+        from braided.report.final import build_final_report
+
+        path = build_final_report(args.runs or [args.run], out_dir=args.out)
+        print(f"wrote {path}")
+        return 0
+    if args.audit:
+        from braided.report.final import audit
+
+        problems = audit(args.runs or [args.run],
+                         report_path=str(args.out) + "/REPORT.md" if args.out != "." else "REPORT.md")
+        if problems:
+            for p in problems:
+                print(f"AUDIT FAIL: {p}")
+            return 1
+        print("report audit clean: every figure traces to ledger data")
+        return 0
+    print("choose one of --tree/--json/--final/--audit", file=sys.stderr)
     return 2
+
+
+def cmd_heldout_sweep(args: argparse.Namespace) -> int:
+    from braided.report.heldout import heldout_summary, heldout_sweep
+
+    heldout_sweep(args.run)
+    summary = heldout_summary(args.run)
+    print(json.dumps(summary, indent=2))
+    return 0
 
 
 def cmd_verify_ledger(args: argparse.Namespace) -> int:
@@ -83,11 +117,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_report = sub.add_parser("report", help="inspect/render a run")
     p_report.add_argument("--run", help="run dir")
+    p_report.add_argument("--runs", nargs="*", help="run dirs (for --final/--audit)")
+    p_report.add_argument("--out", default=".", help="output dir for --final")
     p_report.add_argument("--tree", action="store_true")
     p_report.add_argument("--json", action="store_true")
     p_report.add_argument("--final", action="store_true")
     p_report.add_argument("--audit", action="store_true")
     p_report.set_defaults(func=cmd_report)
+
+    p_sweep = sub.add_parser("heldout-sweep",
+                             help="run the private scorer on every accepted node")
+    p_sweep.add_argument("--run", required=True)
+    p_sweep.set_defaults(func=cmd_heldout_sweep)
 
     p_verify = sub.add_parser("verify-ledger", help="cross-check ledger against the git DAG")
     p_verify.add_argument("--run", required=True, help="run dir")
