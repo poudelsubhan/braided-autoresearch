@@ -1,0 +1,12 @@
+name: nanogpt-shakespeare
+scorer_command: python score.py
+heldout_scorer_command: python heldout_score.py
+protected_paths:
+  - score.py
+  - heldout_score.py
+  - score_common.py
+  - val.txt
+  - meta.json
+budget_seconds: 180
+metric_name: val_loss
+direction: min
