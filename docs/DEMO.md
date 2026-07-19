@@ -18,11 +18,13 @@ uv run braided init-task cpu-optimize --run-id demo
 # edit runs/demo/run.yaml: set strategy: braided, merge_cadence: 5
 uv run braided run --config runs/demo/run.yaml --tui
 
-# Terminal 2 — the projector view (browser: http://localhost:8123/graph.html)
-cd runs/demo && python -m http.server 8123
+# Terminal 2 — the projector views. Serve the repo root once; open TWO tabs:
+#   live run:      http://localhost:8123/runs/demo/graph.html
+#   finished run:  http://localhost:8123/runs/run5-braided-cpu/graph.html
+python -m http.server 8123
 
-# Terminal 3 — have these ready to paste (used mid-demo)
-uv run braided report --tree --run runs/run5-braided-cpu
+# Terminal 3 — backups / extras
+uv run braided report --tree --run runs/run5-braided-cpu   # terminal fallback
 open REPORT.md figures/bakeoff.png figures/replication.png
 cat tasks/cpu-optimize/template/pipeline.py
 ```
@@ -70,8 +72,9 @@ Windows to have open, in presentation order:
 
 ### 1:00–1:50 — The headline result: the merge
 
-**SHOW:** Terminal 3 — run `uv run braided report --tree --run runs/run5-braided-cpu`.
-Point at the merge diamond (cyan node, two parents) and the ◆ markers.
+**SHOW:** browser, second tab — the **finished** run's graph
+(`runs/run5-braided-cpu/graph.html`). Point at the blue merge node m0 (two incoming
+edges) and the red ◆ markers. (Terminal fallback: `braided report --tree`.)
 
 **SAY:**
 > "Here's a finished 30-attempt run, and here's the moment that makes this a DAG and not a
