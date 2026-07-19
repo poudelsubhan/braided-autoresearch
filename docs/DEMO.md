@@ -13,9 +13,8 @@ built-in reward-hacking detector.
 ## Setup (do this ~10 minutes before, takes 5)
 
 ```sh
-# Terminal 1 — create and start the live demo run
-uv run braided init-task cpu-optimize --run-id demo
-# edit runs/demo/run.yaml: set strategy: braided, merge_cadence: 5
+# Terminal 1 — create and start the live demo run (one command, no yaml editing)
+uv run braided init-task cpu-optimize --run-id demo --strategy braided --merge-cadence 5 --attempts 30
 uv run braided run --config runs/demo/run.yaml --tui
 
 # Terminal 2 — the projector views. Serve the repo root once; open TWO tabs:

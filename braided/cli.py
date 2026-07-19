@@ -10,12 +10,20 @@ import sys
 def cmd_init_task(args: argparse.Namespace) -> int:
     from braided.tasks import init_task
 
+    from braided.config import SearchConfig
+
+    search = SearchConfig(
+        strategy=args.strategy,
+        merge_cadence=args.merge_cadence,
+        max_total_runs=args.attempts,
+    )
     run_dir = init_task(
         args.task,
         runs_root=args.runs_root,
         run_id=args.run_id,
         calibrate=args.calibrate,
         budget_seconds=args.budget,
+        search=search,
         seed=args.seed,
     )
     baseline = json.loads((run_dir / "baseline.json").read_text())
@@ -107,6 +115,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("--run-id", default=None)
     p_init.add_argument("--calibrate", type=int, default=3, help="baseline scorer repetitions")
     p_init.add_argument("--budget", type=float, default=None, help="override budget_seconds")
+    p_init.add_argument("--strategy", choices=["greedy", "tree", "braided"], default="greedy")
+    p_init.add_argument("--merge-cadence", type=int, default=10)
+    p_init.add_argument("--attempts", type=int, default=20, help="max_total_runs")
     p_init.add_argument("--seed", type=int, default=0)
     p_init.set_defaults(func=cmd_init_task)
 

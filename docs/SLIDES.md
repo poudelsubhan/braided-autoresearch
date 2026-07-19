@@ -16,7 +16,7 @@ box with the caption. Speaker notes go in the notes field of each slide.
 **Footer:** built in one day with Claude Code · every number auditable from run ledgers
 
 **Speaker notes:** Autoresearch today is a straight line: propose a change, keep or
-revert, repeat. I turned the line into a graph — and the graph wins.
+revert, repeat. I turned the line into a graph, and the graph wins.
 
 ---
 
