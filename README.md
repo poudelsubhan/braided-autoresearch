@@ -2,7 +2,7 @@
 
 **An autonomous AI research agent that optimizes code by searching over a git DAG, combining bandit-driven tree search, LLM-mediated semantic merges, and cross-lineage replication as a reward-hacking detector.**
 
-Most LLM-driven code-optimization loops (e.g. Karpathy-style "keep-or-revert") are **linear**: propose a change, score it, keep it if it helps, revert if it doesn't. That design throws away two things a human researcher relies on: the ability to explore **multiple hypotheses in parallel**, and the ability to **combine** independently-discovered improvements. Braided Autoresearch replaces the linear loop with a search over a real git commit graph:
+Most LLM-driven code-optimization loops (e.g. Karpathy-style "keep-or-revert") are **linear**: propose a change, score it, keep it if it helps, revert if it doesn't. That design throws away two things a human researcher relies on: the ability to explore **multiple hypotheses in parallel**, and the ability to **combine** independently-discovered improvements. In a same-budget bake-off on a CPU-optimization benchmark, braided search **beat the Karpathy-style keep-or-revert autoresearch loop by 21% on best score**, and it won *because* of composition: the winning commit was a semantic merge of two independently-discovered improvement lineages. Braided Autoresearch replaces the linear loop with a search over a real git commit graph:
 
 - **Tree search**: a UCB1 multi-armed bandit schedules which experiment lineage (git branch) to extend next, balancing exploration of new ideas against exploitation of what's working.
 - **Composition via semantic merges**: a merge agent (an LLM) rewrites two lineages' changes into one combined patch against their common ancestor, producing a *true two-parent git merge commit*. This is a semantic merge, not git's textual merge.
@@ -10,14 +10,14 @@ Most LLM-driven code-optimization loops (e.g. Karpathy-style "keep-or-revert") a
 
 Every experiment is a commit, every hypothesis lineage is a branch, every composition is a merge commit, and scores live in `git notes`, so the entire search history is inspectable with ordinary git tooling.
 
-## Results: three strategies, same budget, same task
+## Results: braided beats the Karpathy-style loop at the same budget
 
-Bake-off on the `cpu-optimize` benchmark (a deliberately naive tokenizer + n-gram counter; score = throughput with a byte-exact correctness oracle), 30 scored attempts per strategy, identical noise-calibrated acceptance rule:
+Bake-off on the `cpu-optimize` benchmark (a deliberately naive tokenizer + n-gram counter; score = throughput with a byte-exact correctness oracle), 30 scored attempts per strategy, identical noise-calibrated acceptance rule. The greedy control is exactly the Karpathy-style keep-or-revert autoresearch loop; braided outscored it by 21%:
 
 | strategy | description | best score | gain over baseline |
 |---|---|---:|---:|
 | **braided** | tree search + semantic merges + replication tagging | **5826.5** | **+38219%** |
-| greedy | single-lineage keep-or-revert (control) | 4806.5 | +31862% |
+| greedy | single-lineage Karpathy-style keep-or-revert (control) | 4806.5 | +31862% |
 | tree | UCB1 branching, no merges | 3272.2 | +21679% |
 
 ![bake-off curves](figures/bakeoff.png)
@@ -45,6 +45,54 @@ UCB1 bandit ◄── ledger.jsonl ◄── replication tagger ◄─┘
 6. A held-out **private scorer** (different, hidden input distribution) is never shown to the loop; it's used post-hoc to measure how much of each public gain was real.
 
 Two git repos, never confused: this **harness repo** holds the codebase; each run gets its own **experiment repo** under `runs/<run-id>/repo/` where all branch/commit/merge operations happen.
+
+## Architecture
+
+```
+                 task.yaml (entry cmd · public scorer · private scorer ·
+                            protected paths · wall-clock budget)
+                                      │
+                                      ▼
+        ┌─────────────────────────────────────────────────────┐
+        │  scheduler/   greedy · tree (UCB1) · braided        │
+        │  picks which lineage (git branch) to extend next    │
+        └──────────┬───────────────────────────┬──────────────┘
+                   │ extend lineage            │ every N attempts (braided only)
+                   ▼                           ▼
+        ┌──────────────────────┐    ┌──────────────────────────┐
+        │ agents/proposer      │    │ agents/merge agent       │
+        │ one focused change:  │    │ rewrites two lineages'   │
+        │ {rationale, diff}    │    │ changes into one patch;  │
+        └──────────┬───────────┘    │ true two-parent merge    │
+                   │                └────────────┬─────────────┘
+                   ▼                             │
+        ┌──────────────────────────────┐         │
+        │ runner.py                    │◀────────┘
+        │ apply patch · protected-path │
+        │ check · scorer subprocess    │
+        │ with timeout                 │
+        └──────────┬───────────────────┘
+                   │ {"score": float} or structured failure
+                   ▼
+        ┌──────────────────────────────┐   accept ⇒ commit + score in git notes
+        │ accept.py                    │──────────────────────────┐
+        │ noise-calibrated threshold   │   reject ⇒ revert        │
+        └──────────┬───────────────────┘                          ▼
+                   │ accepted changes             ┌───────────────────────────┐
+                   ▼                              │ graph.py: the git DAG     │
+        ┌──────────────────────────────┐          │  branch  = hypothesis     │
+        │ agents/replication tagger    │─────────▶│  commit  = experiment     │
+        │ change-classes; cross-lineage│          │  merge   = composition    │
+        │ rediscoveries flagged ◆      │          │  note    = score          │
+        └──────────────────────────────┘          └─────────────┬─────────────┘
+                                                                │
+                    ledger.jsonl (append-only, cross-checkable) ◀┘
+                                      │
+                                      ▼
+                 report/: decorated tree view · figures · REPORT.md
+                 (the private held-out scorer runs post-hoc only and is
+                  never shown to the search loop)
+```
 
 ## Quickstart
 
